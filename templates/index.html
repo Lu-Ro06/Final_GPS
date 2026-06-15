@@ -553,7 +553,7 @@
       for(let i=0; i < lugares.length; i++) {
          let ubicacion = lugares[i];
          try {
-           let response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${ubicacion}`);
+           let response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${ubicacion}&countrycodes=mx`);
            let data = await response.json();
            if(data && data.length > 0) {
              const latLng = L.latLng(data[0].lat, data[0].lon);
@@ -893,7 +893,7 @@
     function inicializarAutocomplete(elemento) {
       elemento.autocomplete({
         source: function(request, response) {
-          $.getJSON(`https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${request.term}`, function(data) {
+          $.getJSON(`https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${request.term}&countrycodes=mx`, function(data) {
             response(data.map(item => ({
               label: item.display_name,
               value: item.display_name
