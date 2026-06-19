@@ -1437,14 +1437,36 @@ def distancia_manhattan(p1, p2):
     km_lon = abs(lon1 - lon2) * 111 * cos(radians((lat1+lat2)/2))
     return km_lat + km_lon
 
-def punto_cerca_de_segmento(p, seg_inicio, seg_fin, umbral_km=0.5):
+def punto_cerca_de_segmento(p, seg_inicio, seg_fin, umbral_km=0.1):
     """
-    Verifica si el punto p está dentro de umbral_km de distancia Manhattan a 
-    alguno de los segmentos de línea (seg_inicio -> seg_fin)
+    Verifica si el punto p está dentro de umbral_km de distancia al segmento de línea (seg_inicio -> seg_fin)
     """
-    dist_inicio = distancia_manhattan(p, seg_inicio)
-    dist_fin = distancia_manhattan(p, seg_fin)
-    return dist_inicio <= umbral_km or dist_fin <= umbral_km
+    lat_p, lon_p = p
+    lat_a, lon_a = seg_inicio
+    lat_b, lon_b = seg_fin
+    
+    cos_lat = cos(radians(lat_p))
+    
+    x0, y0 = lon_p * 111 * cos_lat, lat_p * 111
+    x1, y1 = lon_a * 111 * cos_lat, lat_a * 111
+    x2, y2 = lon_b * 111 * cos_lat, lat_b * 111
+    
+    dx = x2 - x1
+    dy = y2 - y1
+    l2 = dx*dx + dy*dy
+    
+    if l2 == 0:
+        dist = ((x0 - x1)**2 + (y0 - y1)**2)**0.5
+        return dist <= umbral_km
+        
+    t = ((x0 - x1)*dx + (y0 - y1)*dy) / l2
+    t = max(0, min(1, t))
+    
+    proj_x = x1 + t * dx
+    proj_y = y1 + t * dy
+    
+    dist = ((x0 - proj_x)**2 + (y0 - proj_y)**2)**0.5
+    return dist <= umbral_km
 
 @app.route('/')
 def index():
@@ -1453,6 +1475,15 @@ def index():
 @app.route('/get_zonas_criticas', methods=['GET'])
 def get_zonas_criticas():
     return jsonify(zonas_criticas)
+
+@app.route('/add_zona_critica', methods=['POST'])
+def add_zona_critica():
+    nueva_zona = request.get_json()
+    # Basic validation
+    if 'nombre' in nueva_zona and 'lat' in nueva_zona and 'lon' in nueva_zona and 'radio_km' in nueva_zona:
+        zonas_criticas.append(nueva_zona)
+        return jsonify({"status": "success", "zonas_criticas": zonas_criticas})
+    return jsonify({"status": "error", "message": "Faltan datos de la zona"}), 400
 
 @app.route('/analisis_ruta', methods=['POST'])
 def analisis_ruta():
@@ -1463,20 +1494,26 @@ def analisis_ruta():
     if not ruta or len(ruta) < 2:
         return jsonify({"costo_casetas": 0, "sueldo_operador": 0, "zonas_criticas": [], "desnivel_metros": 0})
    
+    # Optimización de Rendimiento: Decimación de puntos
+    # En rutas largas, evaluar miles de puntos toma mucho tiempo. 
+    # Tomaremos un máximo de ~500 puntos, lo cual es suficiente gracias a `punto_cerca_de_segmento`.
+    paso = max(1, len(ruta) // 500)
+    ruta_opt = ruta[::paso]
+
     # Optimización de Rendimiento: Bounding Box Filter
-    min_lat = min(p['lat'] for p in ruta) - 0.05
-    max_lat = max(p['lat'] for p in ruta) + 0.05
-    min_lon = min(p['lon'] for p in ruta) - 0.05
-    max_lon = max(p['lon'] for p in ruta) + 0.05
+    min_lat = min(p['lat'] for p in ruta_opt) - 0.05
+    max_lat = max(p['lat'] for p in ruta_opt) + 0.05
+    min_lon = min(p['lon'] for p in ruta_opt) - 0.05
+    max_lon = max(p['lon'] for p in ruta_opt) + 0.05
     
     casetas_candidatas = [c for c in casetas if min_lat <= c['lat'] <= max_lat and min_lon <= c['lon'] <= max_lon]
     
     # 1. Casetas
     costo_total_casetas = 0
     casetas_cruzadas = []
-    for i in range(len(ruta) - 1):
-        inicio = (ruta[i]['lat'], ruta[i]['lon'])
-        fin = (ruta[i+1]['lat'], ruta[i+1]['lon'])
+    for i in range(len(ruta_opt) - 1):
+        inicio = (ruta_opt[i]['lat'], ruta_opt[i]['lon'])
+        fin = (ruta_opt[i+1]['lat'], ruta_opt[i+1]['lon'])
         for c in casetas_candidatas:
             caseta_punto = (c['lat'], c['lon'])
             if punto_cerca_de_segmento(caseta_punto, inicio, fin):
@@ -1508,7 +1545,7 @@ def analisis_ruta():
     for zona in zonas_criticas_candidatas:
         zona_punto = (zona['lat'], zona['lon'])
         # Verificar si algún punto de la ruta entra en el radio de la zona crítica
-        for punto in ruta:
+        for punto in ruta_opt:
             p = (punto['lat'], punto['lon'])
             if distancia_manhattan(zona_punto, p) <= zona['radio_km']:
                 if zona['nombre'] not in zonas_detectadas:

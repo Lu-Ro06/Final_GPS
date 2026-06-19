@@ -342,22 +342,43 @@
     </div>
   </div>
 
+  <!-- Modal Alertas Custom -->
+  <div id="modalAlert" class="modal-glass d-none">
+    <div class="modal-content-glass" style="max-width: 400px; text-align: center;">
+      <div class="modal-header" style="justify-content: center; background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(220, 38, 38, 0.2)); border-bottom: 1px solid rgba(239, 68, 68, 0.3);">
+        <h4 style="color: #fca5a5;"><i class="bi bi-exclamation-triangle-fill"></i> Aviso del Sistema</h4>
+      </div>
+      <div class="modal-body" style="padding: 2rem; display: flex; flex-direction: column; align-items: center; gap: 1.5rem;">
+        <p id="modalAlertMessage" style="font-size: 1.1rem; margin: 0; color: #f3f4f6;"></p>
+        <button onclick="cerrarAlert()" style="width: 100px; border-radius: 20px;">OK</button>
+      </div>
+    </div>
+  </div>
+
   <div id="panel-izquierdo" class="panel-lateral">
     <h3><i class="bi bi-geo-alt"></i> Kova Maps</h3>
     <div class="grupo-entrada" id="inputs-ubicacion">
-      <input id="origenLugar" type="text" class="entrada-ubicacion mb-2 autocomplete-input" placeholder="Lugar de Origen..." autocomplete="off" />
+      <div style="display: flex; gap: 8px; margin-bottom: 0.5rem;">
+        <input id="origenLugar" type="text" class="entrada-ubicacion autocomplete-input" style="margin-bottom: 0;" placeholder="Lugar de Origen..." autocomplete="off" />
+        <button type="button" class="btn-secundario" onclick="usarMiUbicacion()" style="width: 48px; height: 48px; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" title="Usar mi ubicación actual">
+          <i class="bi bi-crosshair"></i>
+        </button>
+      </div>
       <input id="destinoLugar" type="text" class="entrada-ubicacion mb-2 autocomplete-input" placeholder="Lugar de Destino..." autocomplete="off" />
     </div>
 
     <div class="grupo-entrada">
       
       <select id="tipoTransporte">
+        <option value="moto">Motocicleta (Moto)</option>
         <option value="auto">Vehículo Ligero (Auto)</option>
         <option value="camioneta">Vehículo Mediano (Camioneta)</option>
         <option value="camion">Vehículo Pesado (Camión)</option>
       </select>
 
       <select id="cilindros">
+        <option value="1">Motor 1 Cilindro (Moto)</option>
+        <option value="2">Motor 2 Cilindros (Moto Grande)</option>
         <option value="4">Motor 4 Cilindros</option>
         <option value="6">Motor 6 Cilindros</option>
         <option value="8">Motor 8 Cilindros</option>
@@ -373,8 +394,10 @@
       <button onclick="calcularRutaCompleta()"><i class="bi bi-play-fill"></i> Iniciar Ruta</button>
       <button onclick="restaurarBuscador(true)"><i class="bi bi-trash"></i> Eliminar Ruta</button>
       <button id="btnCambioRuta" class="btn-secundario" onclick="cambiarRuta()" style="display:none; margin-top: 5px;"><i class="bi bi-shuffle"></i> Cambio de Ruta</button>
+      <button id="btnModoZona" class="btn-secundario" onclick="toggleModoZona()" style="margin-top: 5px;"><i class="bi bi-exclamation-octagon"></i> Añadir Zona Roja</button>
       <button id="btnEvadirRuta" class="btn-secundario" onclick="evadirZonasRojas()" style="display:none; margin-top: 5px; color: #ef4444; border-color: #ef4444;"><i class="bi bi-shield-fill-check"></i> Ruta Segura (Evadir)</button>
       <button id="btnIndicaciones" class="btn-secundario" onclick="mostrarIndicaciones()" style="display:none; margin-top: 5px;"><i class="bi bi-list-ul"></i> Ver Indicaciones</button>
+      <button id="btnDesgaste" class="btn-secundario" onclick="mostrarDesgaste()" style="display:none; margin-top: 5px;"><i class="bi bi-gear-fill"></i> Calcular Desgaste</button>
     </div>
   </div>
 
@@ -397,6 +420,21 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-routing-machine/3.2.12/leaflet-routing-machine.js"></script>
 
   <script>
+    window.alert = function(msg) {
+      document.getElementById('modalAlertMessage').innerText = msg;
+      document.getElementById('modalAlert').classList.remove('d-none');
+    };
+    function cerrarAlert() {
+      document.getElementById('modalAlert').classList.add('d-none');
+    }
+
+    window.ultimoCostoDesgaste = 0;
+    function mostrarDesgaste() {
+      if (window.ultimoCostoDesgaste > 0) {
+        alert("El desgaste y mantenimiento estimado (llantas, aceite, motor) para esta ruta es de $" + window.ultimoCostoDesgaste.toFixed(2) + " MXN. (No se ha sumado al total)");
+      }
+    }
+
     const capaNormal = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
     const capaOscura = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 });
     const capaGoogleHibrido = L.tileLayer('http://mt0.google.com/vt/lyrs=y&hl=es&x={x}&y={y}&z={z}', { maxZoom: 20 });
@@ -471,29 +509,34 @@
       if (rutasEncontradas.length > 1 && controlRuta) {
         indiceRutaActual = (indiceRutaActual + 1) % rutasEncontradas.length;
         
-        // Ocultar líneas originales de LRM para no empalmar
-        if (controlRuta._line) {
-            mapa.removeLayer(controlRuta._line);
-        }
-        if (controlRuta._alternatives) {
-            controlRuta._alternatives.forEach(alt => mapa.removeLayer(alt));
-        }
-        
-        // Limpiar la línea falsa anterior
-        if (window.rutaFalsa) {
-            mapa.removeLayer(window.rutaFalsa);
-        }
-        
-        // Dibujar la nueva ruta seleccionada
-        window.rutaFalsa = L.polyline(rutasEncontradas[indiceRutaActual].coordinates, { color: '#448aff', opacity: 1, weight: 5 }).addTo(mapa);
-        
-        // Ajustar el mapa a la nueva ruta
-        mapa.fitBounds(window.rutaFalsa.getBounds());
+        let bounds = L.latLngBounds(rutasEncontradas[indiceRutaActual].coordinates);
+        mapa.fitBounds(bounds);
 
-        // Disparar el evento para actualizar los resultados en el panel
         controlRuta.fire('routeselected', {route: rutasEncontradas[indiceRutaActual]});
       }
     };
+
+    let capaRutaTrafico = null;
+    function dibujarLineaConTrafico(coordenadas) {
+        if (capaRutaTrafico) mapa.removeLayer(capaRutaTrafico);
+        if (window.rutaFalsa) mapa.removeLayer(window.rutaFalsa);
+        
+        let segmentos = [];
+        let chunk = [];
+        for (let i = 0; i < coordenadas.length; i++) {
+            chunk.push(coordenadas[i]);
+            if (chunk.length > Math.random() * 20 + 10 || i === coordenadas.length - 1) {
+                let rand = Math.random();
+                let color = '#3b82f6'; // Azul - Fluido
+                if (rand > 0.85) color = '#ef4444'; // Rojo - Pesado
+                else if (rand > 0.70) color = '#f59e0b'; // Naranja - Moderado
+                
+                segmentos.push(L.polyline(chunk, { color: color, opacity: 0.9, weight: 6 }));
+                chunk = [coordenadas[i]]; 
+            }
+        }
+        capaRutaTrafico = L.layerGroup(segmentos).addTo(mapa);
+    }
 
     let zonasCruzadasGlobal = [];
 
@@ -525,6 +568,8 @@
     };
 
     const consumoPorCilindro = {
+      1: 30,
+      2: 20,
       4: 10,
       6: 6,
       8: 4
@@ -600,7 +645,7 @@
           altLineOptions: { styles: [{color: 'transparent', opacity: 0, weight: 0}] },
           router: L.Routing.osrmv1({ language: 'es' }),
           createMarker: () => null,
-          lineOptions: { styles: [{ color: '#448aff', opacity: 0.6, weight: 5 }] }
+          lineOptions: { styles: [{ color: 'transparent', opacity: 0, weight: 0 }] }
         }).on('routesfound', function (e) {
           rutasEncontradas = e.routes;
           indiceRutaActual = 0;
@@ -628,8 +673,24 @@
           marcadoresCasetas.forEach(m => mapa.removeLayer(m));
           marcadoresCasetas = [];
           
+          // Helper para crear cards
+          const addCard = (id, iconClass, label, value, delay, extraClass='') => {
+            const container = document.getElementById('resultados');
+            container.innerHTML += `
+              <div class="resultado-card ${extraClass}" id="${id}" style="animation-delay: ${delay}s">
+                <i class="bi ${iconClass}"></i>
+                <div class="resultado-content">
+                  <span class="resultado-label">${label}</span>
+                  <span class="resultado-value">${value}</span>
+                </div>
+              </div>
+            `;
+          };
+
           const coordsRutaCompleta = e.route.coordinates;
           const instrucciones = e.route.instructions;
+          
+          dibujarLineaConTrafico(coordsRutaCompleta);
           
           // Generar Indicaciones
           let htmlPasos = '';
@@ -651,24 +712,20 @@
             `;
           });
           
+          let autopistas = new Set();
+          instrucciones.forEach((inst) => {
+            if(inst.text.match(/(Autopista|Carretera|Libramiento|Circuito)/i)) {
+              let match = inst.text.match(/(Autopista|Carretera|Libramiento|Circuito)\s+([^,]+)/i);
+              if(match) autopistas.add(match[0].trim());
+            }
+          });
+          
+          if(autopistas.size > 0) {
+             addCard('autopistas', 'bi-signpost', 'Autopistas Principales', Array.from(autopistas).join(', '), 0.15);
+          }
+          
           document.getElementById('listaIndicaciones').innerHTML = htmlPasos;
           document.getElementById('btnIndicaciones').style.display = 'block';
-          
-
-          
-          // Helper para crear cards
-          const addCard = (id, iconClass, label, value, delay, extraClass='') => {
-            const container = document.getElementById('resultados');
-            container.innerHTML += `
-              <div class="resultado-card ${extraClass}" id="${id}" style="animation-delay: ${delay}s">
-                <i class="bi ${iconClass}"></i>
-                <div class="resultado-content">
-                  <span class="resultado-label">${label}</span>
-                  <span class="resultado-value">${value}</span>
-                </div>
-              </div>
-            `;
-          };
 
           addCard('distancia', 'bi-signpost-split icon-dist', 'Distancia', `${distancia.toFixed(2)} km`, 0);
           addCard('tiempo', 'bi-clock-history icon-time', 'Tiempo Estimado', `${minutos} min`, 0.1);
@@ -760,9 +817,9 @@
                  }
               });
             }            // 1. Costo de Desgaste (Llantas y Mantenimiento)
-            let factorVehiculoDesgaste = cilindros === 4 ? 0.8 : (cilindros === 6 ? 1.5 : 3.5);
-            let costoDesgaste = (distancia * factorVehiculoDesgaste) + (desnivel * 0.5);
-            addCard('desgaste', 'bi-gear-fill icon-op', 'Desgaste y Mantenimiento', `$${costoDesgaste.toFixed(2)} MXN`, 0.65);
+            let factorVehiculoDesgaste = cilindros === 1 ? 0.2 : (cilindros === 2 ? 0.4 : (cilindros === 4 ? 0.8 : (cilindros === 6 ? 1.5 : 3.5)));
+            window.ultimoCostoDesgaste = (distancia * factorVehiculoDesgaste) + (desnivel * 0.5);
+            document.getElementById('btnDesgaste').style.display = 'block';
             
             // 2. Geocercas y Restricciones (CDMX / MTY) para 8 cilindros (Vehículo Pesado)
             if (cilindros === 8) {
@@ -799,7 +856,7 @@
                }
             }
 
-            const totalViaje = costoCaseta + costoGasolinaReal + costoDesgaste;
+            const totalViaje = costoCaseta + costoGasolinaReal;
             addCard('total', 'bi-wallet2 icon-total', 'Gran Total del Viaje', `$${totalViaje.toFixed(2)} MXN`, 0.7, 'total-card');
 
 
@@ -836,7 +893,10 @@
       }
       marcadoresCasetas.forEach(m => mapa.removeLayer(m));
       marcadoresCasetas = [];
+      if (capaRutaTrafico) mapa.removeLayer(capaRutaTrafico);
+      if (window.rutaFalsa) mapa.removeLayer(window.rutaFalsa);
       document.getElementById('btnIndicaciones').style.display = 'none';
+      document.getElementById('btnDesgaste').style.display = 'none';
       document.getElementById('btnEvadirRuta').style.display = 'none';
       zonasCruzadasGlobal = [];
 
@@ -855,10 +915,55 @@
       }
     }
 
+    function usarMiUbicacion() {
+      if (navigator.geolocation) {
+        document.getElementById('origenLugar').value = "Obteniendo ubicación...";
+        navigator.geolocation.getCurrentPosition(function(position) {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          document.getElementById('origenLugar').value = `${lat}, ${lng}`;
+        }, function(error) {
+          alert("Error al obtener la ubicación. Por favor asegúrate de dar permisos.");
+          document.getElementById('origenLugar').value = "";
+        });
+      } else {
+        alert("Tu navegador no soporta geolocalización.");
+      }
+    }
 
-
+    let modoAgregarZona = false;
+    function toggleModoZona() {
+      modoAgregarZona = !modoAgregarZona;
+      const btn = document.getElementById('btnModoZona');
+      if (modoAgregarZona) {
+        btn.classList.add('btn-danger');
+        btn.classList.remove('btn-secundario');
+        mapa._container.style.cursor = 'crosshair';
+        alert("Haz clic en el mapa para añadir una zona roja.");
+      } else {
+        btn.classList.remove('btn-danger');
+        btn.classList.add('btn-secundario');
+        mapa._container.style.cursor = '';
+      }
+    }
 
     mapa.on('click', function(e) {
+      if (modoAgregarZona) {
+        let nombre = "Zona Roja " + Math.floor(Math.random() * 10000);
+        let radio = 2; // Por defecto 2 km
+        fetch('/add_zona_critica', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({nombre: nombre, lat: e.latlng.lat, lon: e.latlng.lng, radio_km: radio, riesgo: 'Alto'})
+        }).then(res => res.json()).then(data => {
+          if(data.status === 'success') {
+            cargarZonasCriticas();
+            alert("Zona roja añadida exitosamente");
+          }
+        });
+        toggleModoZona();
+        return;
+      }
       let nombre = `Sitio ${puntosIntermedios.length + 1}`;
       puntosIntermedios.push({ nombre: nombre, latlng: e.latlng });
       agregarMarcador(e.latlng, nombre);
