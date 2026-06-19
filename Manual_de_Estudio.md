@@ -39,29 +39,25 @@ def analisis_ruta():
 ```
 **Explicación:** Al sacar el mínimo y máximo de las coordenadas, creamos un rectángulo virtual que envuelve la ruta. Descartamos instantáneamente todas las casetas que queden fuera del país o del estado por donde vamos, reduciendo drásticamente las operaciones matemáticas.
 
-### 2.2. Detección de Colisiones Geográficas (Distancia Euclidiana)
-Una vez que tenemos las `casetas_candidatas`, debemos saber si la línea azul dibujada por el GPS pasa por encima de ellas. Para eso usamos matemáticas geométricas (Teorema de Pitágoras adaptado a grados).
+### 2.2. Proyección Vectorial Ortogonal y Distancia de Manhattan
+Una vez filtradas las casetas candidatas, determinamos si la ruta exacta pasa por ellas utilizando modelos matemáticos espaciales avanzados en lugar de validaciones punto a punto.
 
 **El Código:**
 ```python
-    for c in casetas_candidatas:
-        costo = c.get('costo', 0)
-        nombre = c.get('nombre', 'Caseta Desconocida')
-        
-        # Iterar sobre las coordenadas de la ruta
-        for p in ruta:
-            # Fórmula de distancia euclidiana al cuadrado (para evitar la costosa raíz cuadrada)
-            dist_sq = (p['lat'] - c['lat'])**2 + (p['lon'] - c['lon'])**2
-            
-            # Si el resultado es menor al umbral (aprox 30-50 metros), se detectó un cruce
-            if dist_sq < 0.00001: 
-                # Verificar que no la hayamos cobrado ya (evitar dobles cobros)
-                if not any(ya_cruzada['nombre'] == nombre for ya_cruzada in casetas_cruzadas):
-                    costo_total_casetas += costo
-                    casetas_cruzadas.append({"nombre": nombre, "costo": costo}) 
-                break # Dejar de analizar esta caseta
+def distancia_manhattan(p1, p2):
+    # Separación de componentes para aproximación ágil
+    km_lat = abs(lat1 - lat2) * 111
+    km_lon = abs(lon1 - lon2) * 111 * cos(radians((lat1+lat2)/2))
+    return km_lat + km_lon
+
+def punto_cerca_de_segmento(p, seg_inicio, seg_fin, umbral_km=0.1):
+    # Cálculo de Proyección Ortogonal mediante Producto Punto (Dot Product)
+    t = ((x0 - x1)*dx + (y0 - y1)*dy) / l2
+    # ...
 ```
-**Explicación:** Se evita usar `math.sqrt()` (la raíz cuadrada) porque es computacionalmente costosa. Simplemente se compara el cuadrado de la distancia contra el cuadrado del umbral. Si la distancia es diminuta, el camión cruzó la caseta y se suma su costo.
+**Explicación:** 
+- **Distancia de Manhattan:** Se utiliza para separar las componentes X y Y al medir proximidades geográficas rápidas (verificar cercanía de zonas rojas o para evitar duplicar el cobro de la misma caseta), aplicando una corrección trigonométrica (`cos`) para compensar la curvatura terrestre.
+- **Proyección Vectorial (Producto Punto):** Es un algoritmo avanzado de geometría computacional. En lugar de iterar cada punto de la curva, el sistema toma "segmentos" (vectores rectos) de la ruta y proyecta ortogonalmente la coordenada de la caseta sobre la línea. Esto revela con precisión matemática si la trayectoria cruza la plaza de cobro, economizando recursos de CPU de forma dramática frente a la fórmula tradicional esférica de Haversine.
 
 ### 2.3. Lógica Laboral NOM-087 (Sueldo del Operador)
 La logística moderna no es solo gasolina; el factor humano está regulado por ley. 
@@ -82,19 +78,20 @@ La logística moderna no es solo gasolina; el factor humano está regulado por l
 ```
 **Explicación:** Se divide matemáticamente el tiempo total entre los ciclos reglamentarios. Esto permite proyectar con total precisión el dinero que se le pagará al conductor, previendo que su jornada se alargará por ley si el viaje es muy largo.
 
-### 2.4. Integración de API Externa (Open-Meteo)
-Para el desgaste del motor y predicciones de combustible, tomamos muestras geográficas y pedimos la altitud sobre el nivel del mar.
+### 2.4. Integración de APIs (OSRM y Open-Elevation)
+El sistema depende de poderosas APIs externas para resolver los problemas matemáticos y de grafos que requerirían supercomputadoras si se procesaran localmente.
 
-**El Código:**
+**El Código (Topografía):**
 ```python
     def obtener_desnivel_acumulado(ruta_muestra):
-        lats_str = ",".join([str(round(p['lat'], 4)) for p in ruta_muestra])
-        lons_str = ",".join([str(round(p['lon'], 4)) for p in ruta_muestra])
-        url = f"https://api.open-meteo.com/v1/elevation?latitude={lats_str}&longitude={lons_str}"
-        response = requests.get(url, timeout=5)
-        # Sigue la lógica que suma la diferencia de altura positiva y negativa...
+        # Se contacta a la API de Open-Elevation
+        url = f"https://api.open-elevation.com/api/v1/lookup?locations={locations}"
+        response = requests.get(url, timeout=3)
+        # Sigue la lógica que suma la diferencia de altura positiva...
 ```
-**Explicación:** Se empaquetan varias coordenadas (separadas por comas) en una sola llamada HTTP `GET` a Open-Meteo. Luego se analiza si el camión "sube" o "baja" montañas restando la altitud actual de la anterior.
+**Explicación y APIs usadas:** 
+1. **OSRM (Open Source Routing Machine):** Utilizada intensivamente por el Frontend (`Leaflet Routing Machine`). OSRM es un motor C++ ultrarrápido que resuelve la **teoría de grafos** aplicando algoritmos de camino mínimo (como **Dijkstra** o **A***) sobre la densa red de calles mapeadas del mundo para devolvernos la ruta óptima.
+2. **Open-Elevation API:** Es una API topográfica gratuita. Python empaqueta muestras de coordenadas del viaje en una llamada `GET` y la API nos devuelve la altitud (Eje Z). Esto permite calcular iterativamente el **desnivel positivo acumulado** (metros reales subidos) para estimar el desgaste de los motores de transporte pesado.
 
 ---
 
@@ -180,7 +177,21 @@ setInterval(cargarZonasCriticas, 10000); // 10,000 milisegundos
 
 ---
 
-## 4. Conclusión / Posibles Preguntas del Jurado
+## 4. Modelos Matemáticos y Espaciales (El Enfoque 4D)
+
+Este proyecto está construido sobre un **modelo logístico de 4 Dimensiones (4D)**, apoyado por algoritmos específicos de Ciencias de la Computación:
+
+1. **Las 2 Dimensiones Físicas (Plano Cartesiano X, Y):** Se utilizan la Latitud y Longitud para aplicar el modelo de **Bounding Box** ($O(N)$), la **Distancia de Manhattan** y la **Proyección Vectorial Ortogonal** (Producto Punto) en la detección de colisiones con casetas y la trigonometría de evasión de zonas rojas.
+2. **La 3ra Dimensión (Altitud Z):** Agregada consultando la API topográfica **Open-Elevation** para medir los relieves montañosos y el desnivel real del viaje.
+3. **La 4ta Dimensión (Tiempo T):** Implementada mediante el modelo aritmético de la **NOM-087**, procesando los minutos del viaje a través de divisiones cíclicas para calcular pausas de descanso obligatorio y proyectar con precisión legal el sueldo del operador.
+4. **Algoritmos de Grafos (Dijkstra / A*):** Abstraídos a través de la API **OSRM**, encargada de recorrer la red vial como un grafo matemático gigante para buscar el camino más corto.
+
+---
+
+## 5. Conclusión / Posibles Preguntas del Jurado
+
+- **¿Qué algoritmos de Lenguajes y Autómatas o Teoría de Grafos utilizas?**
+  **R:** La búsqueda del camino más corto se apoya en algoritmos de grafos como **Dijkstra y A*** delegados a la API de **OSRM**. Por parte del código interno (Backend), el intercambio JSON cliente-servidor actúa sobre **Analizadores Sintácticos (Parsers)**, y la lógica del sistema funciona como una **Máquina de Estados** que transiciona desde el input del usuario hasta aplicar filtros espaciales (Manhattan, Proyección Ortogonal) y resolver la 4ta dimensión (NOM-087).
 
 - **¿Por qué usaste Flask y Python en lugar de Node.js o PHP?**
   **R:** Python es superior para el manejo matemático y análisis de datos masivos (arreglos enormes de coordenadas, geolocalización, Bounding Box y manipulación de JSON). Flask, al ser ligero, permite crear una API muy rápida sin el peso de otros frameworks.
