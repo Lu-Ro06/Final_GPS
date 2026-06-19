@@ -187,6 +187,10 @@ Este proyecto está construido sobre un **modelo logístico de 4 Dimensiones (4D
 4. **Algoritmos de Grafos (Dijkstra / A*):** Abstraídos a través de la API **OSRM**, encargada de recorrer la red vial como un grafo matemático gigante para buscar el camino más corto.
 
 ---
+## Explicacion Modelos MATEMATICOS
+Dijkstra (Para calcular calles vía OSRM).
+Distancia de Manhattan (Para detectar proximidad de zonas peligrosas).
+Proyección Vectorial (Para detectar si la ruta cruza exactamente por el punto de una caseta).
 
 ## 5. Conclusión / Posibles Preguntas del Jurado
 
