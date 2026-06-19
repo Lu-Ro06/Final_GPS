@@ -189,7 +189,9 @@ Este proyecto está construido sobre un **modelo logístico de 4 Dimensiones (4D
 ---
 ## Explicacion Modelos MATEMATICOS
 Dijkstra (Para calcular calles vía OSRM).
+
 Distancia de Manhattan (Para detectar proximidad de zonas peligrosas).
+
 Proyección Vectorial (Para detectar si la ruta cruza exactamente por el punto de una caseta).
 
 ## 5. Conclusión / Posibles Preguntas del Jurado
